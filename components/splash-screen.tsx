@@ -1,11 +1,18 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { usePathname } from 'next/navigation'
 
 const MAX_DURATION_MS = 8000
 const FADE_MS = 700
 
 export function SplashScreen() {
+  const pathname = usePathname()
+  if (pathname?.startsWith('/admin')) return null
+  return <SplashVideo />
+}
+
+function SplashVideo() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [leaving, setLeaving] = useState(false)
   const [hidden, setHidden] = useState(false)
