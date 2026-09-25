@@ -1,6 +1,7 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Manrope, Cormorant_Garamond } from 'next/font/google'
+import { SplashScreen } from '@/components/splash-screen'
 import './globals.css'
 
 const sans = Manrope({ subsets: ['latin', 'cyrillic'], variable: '--font-manrope' })
@@ -42,6 +43,7 @@ export default function RootLayout({
   return (
     <html lang="ru" className={`bg-background light ${sans.variable} ${serif.variable}`}>
       <body className="font-sans antialiased">
+        <SplashScreen />
         {children}
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
