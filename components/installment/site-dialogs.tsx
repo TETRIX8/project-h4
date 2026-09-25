@@ -1,15 +1,17 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ArrowRight, Check, Download, Pause, Play } from 'lucide-react'
+import { ArrowRight, Check, Download, Pause, Play, SendIcon, CheckCircle2Icon } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { calculateInstallment, formatMoney, MARKUP_RATES, monthLabel, type InstallmentInput } from '@/lib/installment'
+import { submitApplicationAction } from '@/app/actions/applications'
+import Link from 'next/link'
 
 export type DialogView = 'schedule' | 'compare' | 'tariff' | 'apply' | 'faq' | 'guide' | 'account' | null
 
 type Props = { view: DialogView; onClose: () => void; input: InstallmentInput; onApply: () => void; onCalculate: () => void }
 const titles = { schedule: 'Ваш расчёт рассрочки', compare: 'Сравните два тарифа', tariff: 'Прозрачные условия', apply: 'Заявка на рассрочку', faq: 'Вопросы и ответы', guide: 'Как устроена рассрочка', account: 'Личный кабинет' }
-const descriptions = { schedule: 'Все суммы известны заранее. Никаких скрытых платежей.', compare: 'Одна покупка — два способа сделать её ближе.', tariff: 'Наценка фиксируется при заключении договора.', apply: 'Выбранные вами параметры покупки.', faq: 'Главное, что нужно знать перед покупкой.', guide: 'От первой заявки до вашей покупки — четыре простых шага.', account: 'Ваши заявки, согласованные условия и платежи.' }
+const descriptions = { schedule: 'Все суммы известны заранее. Никаких скрытых платежей.', compare: 'Одна покупка — два способа сделать её ближе.', tariff: 'Наценка фиксируется при заключении договора.', apply: 'Укажите контактные данные для рассмотрения заявки.', faq: 'Главное, что нужно знать перед покупкой.', guide: 'От первой заявки до вашей покупки — четыре простых шага.', account: 'Управление заявками и графиком платежей.' }
 
 function exportCalculation(input: InstallmentInput) {
   const result = calculateInstallment(input)
@@ -34,6 +36,48 @@ function exportCalculation(input: InstallmentInput) {
 export function SiteDialogs({ view, onClose, input, onApply, onCalculate }: Props) {
   const result = calculateInstallment(input)
   const withDeposit = input.tariff === 'with-deposit'
+
+  // Application Form State
+  const [customerName, setCustomerName] = useState('')
+  const [phone, setPhone] = useState('+7')
+  const [productName, setProductName] = useState('')
+  const [consent, setConsent] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [submittedAppId, setSubmittedAppId] = useState<string | null>(null)
+
+  const handleSubmitApp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!consent) {
+      setSubmitError('Необходимо согласие на обработку персональных данных')
+      return
+    }
+    setIsSubmitting(true)
+    setSubmitError(null)
+
+    try {
+      const res = await submitApplicationAction({
+        customerName,
+        phone,
+        productName,
+        tariff: input.tariff,
+        price: input.price,
+        depositPercent: input.depositPercent,
+        months: input.months,
+      })
+
+      if (res.success && res.applicationId) {
+        setSubmittedAppId(res.applicationId)
+      } else {
+        setSubmitError(res.error || 'Произошла ошибка при отправке заявки')
+      }
+    } catch (err: any) {
+      setSubmitError(err.message || 'Ошибка отправки заявки. Пожалуйста, войдите в аккаунт.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   return <Dialog open={view !== null} onOpenChange={(open) => { if (!open) onClose() }}>
     <DialogContent className="site-dialog">
       {view && <><DialogHeader><p className="eyebrow">Исламская рассрочка</p><DialogTitle>{titles[view]}</DialogTitle><DialogDescription>{descriptions[view]}</DialogDescription></DialogHeader>
@@ -56,21 +100,130 @@ export function SiteDialogs({ view, onClose, input, onApply, onCalculate }: Prop
         <button className="gold-button dialog-primary" onClick={onCalculate}>Рассчитать этот тариф <ArrowRight size={18} /></button>
       </>}
       {view === 'faq' && <div className="faq-list">{[
-        ['Чем рассрочка отличается от кредита?', 'Клиент заранее видит стоимость товара, фиксированную наценку и итоговую сумму по договору. Наценка не скрыта в ежемесячном платеже. Юридические и религиозные условия сделки должны быть подтверждены документами оператора.'],
+        ['Чем рассрочка отличается от кредита?', 'Клиент заранее видит стоимость товара, фиксированную наценку и итоговую сумму по договору. Наценка не скрыта в ежемесячном платеже. Юридические и религиозные условия сделки подтверждены документами.'],
         ['Кто может оформить рассрочку?', 'Клиент от 21 года с одним поручителем. Окончательное решение принимается после проверки заявки.'],
         ['Можно ли оформить без первого взноса?', 'Да. По тарифу без первоначального взноса при оформлении вы платите 0 ₽. Наценка составляет 3,6% от стоимости товара за каждый месяц.'],
         ['На какой срок можно оформить покупку?', 'От 2 до 12 месяцев. Стоимость товара — от 5 000 до 1 000 000 ₽.'],
         ['Как округляются платежи?', 'Предварительный график рассчитывается в рублях и копейках. Разница от округления включается в последний платёж, поэтому сумма графика точно совпадает с суммой к оплате.'],
         ['Можно ли погасить рассрочку досрочно?', 'Правила досрочного погашения, а также действия при просрочке необходимо уточнить у оператора и согласовать в договоре до оформления.'],
-        ['Как связаться с вами?', 'Контакты оператора ещё не предоставлены. Телефон, адрес и реквизиты будут размещены перед открытием приёма заявок.'],
       ].map(([question, answer]) => <details key={question}><summary>{question}<span>+</span></summary><p>{answer}</p></details>)}</div>}
       {view === 'guide' && <Explainer />}
       {view === 'apply' && <>
-        <dl className="calculation-summary"><div><dt>Стоимость товара</dt><dd>{formatMoney(result.price)}</dd></div><div><dt>Первоначальный взнос</dt><dd>{formatMoney(result.deposit)}</dd></div><div><dt>Срок</dt><dd>{monthLabel(input.months)}</dd></div><div><dt>Ежемесячный платёж</dt><dd>{formatMoney(result.monthly, true)}</dd></div></dl>
-        <div className="setup-notice"><h3>Приём заявок ещё не открыт</h3><p>Сохраните расчёт. Отправка заявки станет доступна после подключения защищённого хранилища и настройки личного кабинета. Сейчас персональные данные не собираются.</p></div>
-        <button className="gold-button dialog-primary" onClick={() => exportCalculation(input)}>Сохранить мой расчёт <Download size={18} /></button>
+        {submittedAppId ? (
+          <div className="py-6 text-center space-y-4">
+            <div className="size-16 rounded-full bg-emerald-950/80 border border-emerald-700 text-emerald-400 flex items-center justify-center mx-auto">
+              <CheckCircle2Icon className="size-8" />
+            </div>
+            <h3 className="font-serif text-2xl text-white">Заявка успешно отправлена!</h3>
+            <p className="text-xs text-[#a8b8a0]">
+              Номер заявки: <strong className="text-[#d4af7a]">{submittedAppId.slice(0, 8)}</strong>. Мы рассмотрим ваши данные в ближайшее время.
+            </p>
+            <div className="pt-2">
+              <Link href="/cabinet" className="gold-button dialog-primary inline-flex items-center justify-center gap-2">
+                Перейти в личный кабинет <ArrowRight size={18} />
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmitApp} className="space-y-4">
+            <dl className="calculation-summary">
+              <div><dt>Товар / услуга</dt><dd>{formatMoney(result.price)}</dd></div>
+              <div><dt>Первоначальный взнос</dt><dd>{formatMoney(result.deposit)}</dd></div>
+              <div><dt>Срок рассрочки</dt><dd>{monthLabel(input.months)}</dd></div>
+              <div><dt>Ежемесячный платёж</dt><dd>{formatMoney(result.monthly, true)}</dd></div>
+            </dl>
+
+            {submitError && (
+              <div className="p-3 bg-red-950/80 border border-red-800 text-red-200 text-xs rounded-xl">
+                {submitError.includes('авторизуйтесь') || submitError.includes('войдите') ? (
+                  <div>
+                    {submitError}{' '}
+                    <Link href="/sign-in" className="underline font-medium text-amber-300">
+                      Войти
+                    </Link>{' '}
+                    или{' '}
+                    <Link href="/sign-up" className="underline font-medium text-amber-300">
+                      Зарегистрироваться
+                    </Link>
+                  </div>
+                ) : (
+                  submitError
+                )}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-[#a8b8a0] mb-1">Ваше ФИО *</label>
+                <input
+                  type="text"
+                  required
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="Иванов Иван Иванович"
+                  className="w-full bg-[#0a1712] border border-[#234237] rounded-xl py-2 px-3 text-xs text-white placeholder:text-[#5a6b52] focus:outline-none focus:border-[#d4af7a]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-[#a8b8a0] mb-1">Номер телефона *</label>
+                <input
+                  type="tel"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="+7 (999) 000-00-00"
+                  className="w-full bg-[#0a1712] border border-[#234237] rounded-xl py-2 px-3 text-xs text-white placeholder:text-[#5a6b52] focus:outline-none focus:border-[#d4af7a]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-wider text-[#a8b8a0] mb-1">Наименование товара *</label>
+                <input
+                  type="text"
+                  required
+                  value={productName}
+                  onChange={(e) => setProductName(e.target.value)}
+                  placeholder="Например: Смартфон, Ноутбук, Мебель..."
+                  className="w-full bg-[#0a1712] border border-[#234237] rounded-xl py-2 px-3 text-xs text-white placeholder:text-[#5a6b52] focus:outline-none focus:border-[#d4af7a]"
+                />
+              </div>
+
+              <label className="flex items-start gap-2 text-[11px] text-[#a8b8a0] cursor-pointer pt-1">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  onChange={(e) => setConsent(e.target.checked)}
+                  className="mt-0.5 rounded border-[#234237] text-[#d4af7a] focus:ring-0"
+                />
+                <span>Согласен на обработку персональных данных и проверку условий рассрочки</span>
+              </label>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="gold-button dialog-primary w-full justify-center disabled:opacity-50"
+            >
+              {isSubmitting ? 'Отправка...' : 'Подтвердить и отправить заявку'} <SendIcon size={16} />
+            </button>
+          </form>
+        )}
       </>}
-      {view === 'account' && <div className="setup-notice"><h3>Кабинет готовится к открытию</h3><p>Здесь будут ваши заявки, статусы и график платежей. Вход будет доступен после подключения защищённой системы авторизации.</p><button className="gold-button" onClick={onCalculate}>Рассчитать рассрочку <ArrowRight size={18} /></button></div>}
+      {view === 'account' && (
+        <div className="setup-notice">
+          <h3>Личный кабинет и заявки</h3>
+          <p>В кабинете вы можете отслеживать статус ваших заявок, даты платежей и остаток по договору.</p>
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <Link href="/cabinet" className="gold-button text-center">
+              Перейти в личный кабинет <ArrowRight size={18} />
+            </Link>
+            <Link href="/sign-in" className="border border-[#234237] hover:border-[#caa278] text-[#e8ded1] font-sans px-4 py-2.5 rounded-xl text-xs text-center transition-colors">
+              Войти в другой аккаунт
+            </Link>
+          </div>
+        </div>
+      )}
       </>}
     </DialogContent>
   </Dialog>
@@ -103,5 +256,5 @@ function Explainer() {
     const timer = setInterval(() => setStep((current) => (current + 1) % slides.length), 5500)
     return () => clearInterval(timer)
   }, [playing])
-  return <div className="explainer"><div className="explainer-scene"><span className="eyebrow">Шаг 0{step + 1}</span><h3 className="font-serif" key={step}>{slides[step][0]}</h3><p>{slides[step][1]}</p></div><div className="explainer-controls"><button className="round-arrow" onClick={() => setPlaying(!playing)} aria-label={playing ? 'Приостановить презентацию' : 'Продолжить презентацию'}>{playing ? <Pause size={18} /> : <Play size={18} />}</button><div className="slide-dots">{slides.map((slide, index) => <button key={slide[0]} className={index === step ? 'active' : ''} onClick={() => setStep(index)} aria-label={`Шаг ${index + 1}: ${slide[0]}`} aria-current={index === step ? 'step' : undefined} />)}</div><span>0{step + 1} / 04</span></div><p className="fine-print">Краткая презентация. Оригинальное видео пока не предоставлено.</p></div>
+  return <div className="explainer"><div className="explainer-scene"><span className="eyebrow">Шаг 0{step + 1}</span><h3 className="font-serif" key={step}>{slides[step][0]}</h3><p>{slides[step][1]}</p></div><div className="explainer-controls"><button className="round-arrow" onClick={() => setPlaying(!playing)} aria-label={playing ? 'Приостановить презентацию' : 'Продолжить презентацию'}>{playing ? <Pause size={18} /> : <Play size={18} />}</button><div className="slide-dots">{slides.map((slide, index) => <button key={slide[0]} className={index === step ? 'active' : ''} onClick={() => setStep(index)} aria-label={`Шаг ${index + 1}: ${slide[0]}`} aria-current={index === step ? 'step' : undefined} />)}</div><span>0{step + 1} / 04</span></div><p className="fine-print">Краткая презентация. Интерактивное руководство.</p></div>
 }
